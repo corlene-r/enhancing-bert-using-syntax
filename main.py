@@ -282,7 +282,7 @@ def main(cli_args):
 if __name__ == '__main__':
     cli_parser = argparse.ArgumentParser()
 
-    cli_parser.add_argument("--taxonomy", type=str, choices=("original", "ekman", "group"), required=True, help="Taxonomy (original, ekman, group)", default="original")
+    cli_parser.add_argument("--taxonomy", type=str, choices=("original", "ekman", "group"), help="Taxonomy (original, ekman, group)", default="original")
 
     cli_args = cli_parser.parse_args()
 
