@@ -27,14 +27,21 @@ def compute_metrics(labels, preds):
     results = dict()
 
     results["accuracy"] = accuracy_score(labels, preds)
-    results["macro_precision"], results["macro_recall"], results[
-        "macro_f1"], _ = precision_recall_fscore_support(
-        labels, preds, average="macro")
-    results["micro_precision"], results["micro_recall"], results[
-        "micro_f1"], _ = precision_recall_fscore_support(
-        labels, preds, average="micro")
-    results["weighted_precision"], results["weighted_recall"], results[
-        "weighted_f1"], _ = precision_recall_fscore_support(
-        labels, preds, average="weighted")
 
-    return results
+    zero_division = 0
+
+    results["macro_precision"], results["macro_recall"], results["macro_f1"], _ \
+        = precision_recall_fscore_support(labels, preds, average="macro", zero_division=zero_division)
+
+    results["micro_precision"], results["micro_recall"], results["micro_f1"], _ \
+        = precision_recall_fscore_support(labels, preds, average="micro", zero_division=zero_division)
+
+    results["weighted_precision"], results["weighted_recall"], results["weighted_f1"], _ \
+        = precision_recall_fscore_support(labels, preds, average="weighted", zero_division=zero_division)
+
+    out_headers = ["accuracy", "macro_precision", "macro_recall", "macro_f1", "micro_precision", "micro_recall", "micro_f1", "weighted_precision", "weighted_recall", "weighted_f1"]
+    return (
+        results,
+        out_headers,
+        [results[header] for header in out_headers]
+    )

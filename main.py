@@ -3,6 +3,8 @@ import json
 import logging
 import os
 import glob
+import csv
+import time
 
 import numpy as np
 import torch
@@ -17,6 +19,7 @@ from transformers import (
 )
 
 from bert_multi_label_classifier import BertForMultiLabelClassification
+from modified_multi_label_classifier import ModifiedBertForMultiLabelClassification
 from utils import (
     init_logger,
     set_seed,
@@ -27,6 +30,8 @@ from data_loader import (
     GoEmotionsProcessor
 )
 
+CSV_FILE = os.path.join(".", "evals.csv")
+
 logger = logging.getLogger(__name__)
 
 
@@ -34,8 +39,10 @@ def train(args,
           model,
           tokenizer,
           train_dataset,
-          dev_dataset=None,
-          test_dataset=None):
+          model_type,
+          run_id,
+          dev_dataset,
+          test_dataset):
     train_sampler = RandomSampler(train_dataset)
     train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
     if args.max_steps > 0:
@@ -78,20 +85,25 @@ def train(args,
     global_step = 0
     tr_loss = 0.0
 
+    start_time = time.time() 
+
+    # the global steps at which the model was saved
+    saved_steps = []
+
     model.zero_grad()
     train_iterator = trange(int(args.num_train_epochs), desc="Epoch")
-    for _ in train_iterator:
+    for epoch in train_iterator:
+        epoch += 1
         epoch_iterator = tqdm(train_dataloader, desc="Iteration")
         for step, batch in enumerate(epoch_iterator):
             model.train()
             batch = tuple(t.to(args.device) for t in batch)
-            inputs = {
-                "input_ids": batch[0],
-                "attention_mask": batch[1],
-                "token_type_ids": batch[2],
-                "labels": batch[3]
-            }
-            outputs = model(**inputs)
+            outputs = model(
+                input_ids      = batch[0],
+                attention_mask = batch[1],
+                token_type_ids = batch[2],
+                labels         = batch[3]
+            )
 
             loss = outputs[0]
 
@@ -111,41 +123,38 @@ def train(args,
                 model.zero_grad()
                 global_step += 1
 
-                if args.logging_steps > 0 and global_step % args.logging_steps == 0:
-                    if args.evaluate_test_during_training:
-                        evaluate(args, model, test_dataset, "test", global_step)
-                    else:
-                        evaluate(args, model, dev_dataset, "dev", global_step)
-
-                if args.save_steps > 0 and global_step % args.save_steps == 0:
-                    # Save model checkpoint
-                    output_dir = os.path.join(args.output_dir, "checkpoint-{}".format(global_step))
-                    if not os.path.exists(output_dir):
-                        os.makedirs(output_dir)
-                    model_to_save = (
-                        model.module if hasattr(model, "module") else model
-                    )
-                    model_to_save.save_pretrained(output_dir)
-                    tokenizer.save_pretrained(output_dir)
-
-                    torch.save(args, os.path.join(output_dir, "training_args.bin"))
-                    logger.info("Saving model checkpoint to {}".format(output_dir))
-
-                    if args.save_optimizer:
-                        torch.save(optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
-                        torch.save(scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
-                        logger.info("Saving optimizer and scheduler states to {}".format(output_dir))
-
             if args.max_steps > 0 and global_step > args.max_steps:
                 break
+
+        # Save model checkpoint
+        output_dir = os.path.join(args.output_dir, "checkpoint-{}-{}".format(model_type, global_step))
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        model_to_save = (model.module if hasattr(model, "module") else model)
+        model_to_save.save_pretrained(output_dir)
+        tokenizer.save_pretrained(output_dir)
+        saved_steps.append(str(global_step))
+
+        torch.save(args, os.path.join(output_dir, "training_args.bin"))
+        logger.info("Saving model checkpoint to {}".format(output_dir))
+
+        if args.save_optimizer:
+            torch.save(optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
+            torch.save(scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
+            logger.info("Saving optimizer and scheduler states to {}".format(output_dir))
+
+        # Evaluate the model at this epoch
+        time_passed = time.time() - start_time
+        #evaluate(args, model, test_dataset, "test", run_id, time_passed, True, model_type, epoch, global_step)
+        evaluate(args, model, dev_dataset , "dev" , run_id, time_passed, True, model_type, epoch, global_step)
 
         if args.max_steps > 0 and global_step > args.max_steps:
             break
 
-    return global_step, tr_loss / global_step
+    return saved_steps, global_step, tr_loss / global_step
 
 
-def evaluate(args, model, eval_dataset, mode, global_step=None):
+def evaluate(args, model, eval_dataset, mode, run_id, time_taken, add_csv_row, model_type, epoch, global_step=None):
     results = {}
     eval_sampler = SequentialSampler(eval_dataset)
     eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
@@ -166,24 +175,26 @@ def evaluate(args, model, eval_dataset, mode, global_step=None):
         model.eval()
         batch = tuple(t.to(args.device) for t in batch)
 
+        labels = batch[3]
+
         with torch.no_grad():
-            inputs = {
-                "input_ids": batch[0],
-                "attention_mask": batch[1],
-                "token_type_ids": batch[2],
-                "labels": batch[3]
-            }
-            outputs = model(**inputs)
+            outputs = model(
+                input_ids      = batch[0],
+                attention_mask = batch[1],
+                token_type_ids = batch[2],
+                labels         = batch[3]
+            )
             tmp_eval_loss, logits = outputs[:2]
 
             eval_loss += tmp_eval_loss.mean().item()
+
         nb_eval_steps += 1
         if preds is None:
             preds = 1 / (1 + np.exp(-logits.detach().cpu().numpy()))  # Sigmoid
-            out_label_ids = inputs["labels"].detach().cpu().numpy()
+            out_label_ids = labels.detach().cpu().numpy()
         else:
             preds = np.append(preds, 1 / (1 + np.exp(-logits.detach().cpu().numpy())), axis=0)  # Sigmoid
-            out_label_ids = np.append(out_label_ids, inputs["labels"].detach().cpu().numpy(), axis=0)
+            out_label_ids = np.append(out_label_ids, labels.detach().cpu().numpy(), axis=0)
 
     eval_loss = eval_loss / nb_eval_steps
     results = {
@@ -191,8 +202,24 @@ def evaluate(args, model, eval_dataset, mode, global_step=None):
     }
     preds[preds > args.threshold] = 1
     preds[preds <= args.threshold] = 0
-    result = compute_metrics(out_label_ids, preds)
+    (result, headers, values) = compute_metrics(out_label_ids, preds)
     results.update(result)
+
+    headers = ["run_id", "epoch", "mode", "taxonomy"     , "time_taken", "model_type"] + headers
+    values  = [ run_id ,  epoch ,  mode ,  args.taxonomy ,  time_taken ,  model_type ] + values
+
+    if add_csv_row:
+        if not os.path.exists(CSV_FILE):
+            # create the file and add header row to it
+            with open(CSV_FILE, 'w+') as f: # create the file
+                writer = csv.writer(f, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL, lineterminator="\n")
+                writer.writerow(headers)
+                writer.writerow(values)
+        else:
+            # just append the values to the csv
+            with open(CSV_FILE, mode="a", encoding="utf-8") as f:
+                writer = csv.writer(f, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL, lineterminator="\n")
+                writer.writerow(values)
 
     output_dir = os.path.join(args.output_dir, mode)
     if not os.path.exists(output_dir):
@@ -216,6 +243,8 @@ def main(cli_args):
     logger.info("Training/evaluation parameters {}".format(args))
 
     args.output_dir = os.path.join(args.ckpt_dir, args.output_dir)
+    args.taxonomy = cli_args.taxonomy
+    args.model_type = cli_args.model_type
 
     init_logger()
     set_seed(args)
@@ -233,32 +262,36 @@ def main(cli_args):
     tokenizer = BertTokenizer.from_pretrained(
         args.tokenizer_name_or_path,
     )
-    model = BertForMultiLabelClassification.from_pretrained(
-        args.model_name_or_path,
-        config=config
-    )
+
+    if args.model_type == "goemotions":
+        model = BertForMultiLabelClassification.from_pretrained(
+            args.model_name_or_path,
+            config=config
+        )
+    else:
+        model = ModifiedBertForMultiLabelClassification.from_pretrained(
+            args.model_name_or_path,
+            config=config
+        )
 
     # GPU or CPU
     args.device = "cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu"
     model.to(args.device)
+
+    run_id = str(time.time())
 
     # Load dataset
     train_dataset = load_and_cache_examples(args, tokenizer, mode="train") if args.train_file else None
     dev_dataset = load_and_cache_examples(args, tokenizer, mode="dev") if args.dev_file else None
     test_dataset = load_and_cache_examples(args, tokenizer, mode="test") if args.test_file else None
 
-    if dev_dataset is None:
-        args.evaluate_test_during_training = True  # If there is no dev dataset, only use test dataset
-
-    if args.do_train:
-        global_step, tr_loss = train(args, model, tokenizer, train_dataset, dev_dataset, test_dataset)
-        logger.info(" global_step = {}, average loss = {}".format(global_step, tr_loss))
+    saved_steps, global_step, tr_loss = train(args, model, tokenizer, train_dataset, args.model_type, run_id, dev_dataset, test_dataset)
+    logger.info(" global_step = {}, average loss = {}".format(global_step, tr_loss))
 
     results = {}
     if args.do_eval:
-        checkpoints = list(
-            os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + "/**/" + "pytorch_model.bin", recursive=True))
-        )
+        checkpoints = [os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + "/**/" + "pytorch_model.bin", recursive=True))]
+        checkpoints = [checkpoint for checkpoint in checkpoints if (args.model_type in checkpoint)]
         if not args.eval_all_checkpoints:
             checkpoints = checkpoints[-1:]
         else:
@@ -266,10 +299,20 @@ def main(cli_args):
             logging.getLogger("transformers.modeling_utils").setLevel(logging.WARN)  # Reduce logging
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
         for checkpoint in checkpoints:
-            global_step = checkpoint.split("-")[-1]
-            model = BertForMultiLabelClassification.from_pretrained(checkpoint)
+            split = checkpoint.split("-")
+            (model_type, global_step) = (split[-2], split[-1])
+
+            if str(global_step) not in saved_steps:
+                # only evaluate the steps that were saved during training
+                continue
+
+            if model_type == "goemotions":
+                model = BertForMultiLabelClassification.from_pretrained(checkpoint)
+            else:
+                model = ModifiedBertForMultiLabelClassification.from_pretrained(checkpoint)
+
             model.to(args.device)
-            result = evaluate(args, model, test_dataset, mode="test", global_step=global_step)
+            result = evaluate(args, model, test_dataset, "test", run_id=run_id, time_taken=0, add_csv_row=True, model_type=args.model_type, epoch=0, global_step=global_step)
             result = dict((k + "_{}".format(global_step), v) for k, v in result.items())
             results.update(result)
 
@@ -283,6 +326,7 @@ if __name__ == '__main__':
     cli_parser = argparse.ArgumentParser()
 
     cli_parser.add_argument("--taxonomy", type=str, choices=("original", "ekman", "group"), help="Taxonomy (original, ekman, group)", default="original")
+    cli_parser.add_argument("--model_type", type=str, choices=("goemotions", "goemotions_modified"), help="What model to use to train (\"goemotions\", \"goemotions_modified\")", default="goemotions_modified")
 
     cli_args = cli_parser.parse_args()
 
