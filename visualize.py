@@ -10,13 +10,15 @@ dev = p_df[p_df["mode"] == "dev"]
 dev_modified_goemotions = dev[dev["model_type"] != "goemotions"]
 dev_goemotions = dev[dev["model_type"] == "goemotions"]
 
-print(dev.groupby("model_type")["macro_f1"].mean())
+print(dev.groupby("model_type")["accuracy"].mean())
 
 def show_plot(df: pd.DataFrame, title):
     df.groupby("run_id") \
-      .plot(x="epoch", y=["accuracy", "macro_f1"])
+      .plot(x="epoch", y=["macro_f1"])
 
     plt.title(title)
+    plt.ylabel("Macro F1")
+    plt.xlabel("Epoch")
     plt.ylim(0.3, 0.55)
     plt.xlim(1, 10)
     plt.show()
