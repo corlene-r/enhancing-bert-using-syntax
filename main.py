@@ -205,8 +205,8 @@ def evaluate(args, model, eval_dataset, mode, run_id, time_taken, add_csv_row, m
     (result, headers, values) = compute_metrics(out_label_ids, preds)
     results.update(result)
 
-    headers = ["run_id", "epoch", "mode", "taxonomy"     , "time_taken", "model_type"] + headers
-    values  = [ run_id ,  epoch ,  mode ,  args.taxonomy ,  time_taken ,  model_type ] + values
+    headers = ["run_id",     "seed", "epoch", "mode",      "taxonomy", "time_taken", "model_type"] + headers
+    values  = [ run_id , args.seed ,  epoch ,  mode ,  args.taxonomy ,  time_taken ,  model_type ] + values
 
     if add_csv_row:
         if not os.path.exists(CSV_FILE):
@@ -246,8 +246,12 @@ def main(cli_args):
     args.taxonomy = cli_args.taxonomy
     args.model_type = cli_args.model_type
 
-    init_logger()
-    set_seed(args)
+    init_logger() 
+
+    import random
+    random.seed(None) # make sure that `random` uses system time for randomness
+    args.seed = random.randint(0, (2**32)-1) # get a randomly-generated seed
+    set_seed(args) # set the seed for all objects (including `random`)
 
     processor = GoEmotionsProcessor(args)
     label_list = processor.get_labels()
@@ -330,4 +334,9 @@ if __name__ == '__main__':
 
     cli_args = cli_parser.parse_args()
 
+    #cli_args.model_type = "goemotions"
+    #main(cli_args)
+
+    cli_args.model_type = "goemotions_modified"
+    main(cli_args)
     main(cli_args)
