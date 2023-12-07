@@ -3,7 +3,6 @@ spectral_parser/new.prm
 logo.key
 .idea/
 *ipynb
-spectral_parser/output/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
