@@ -1,9 +1,0 @@
-click
-joblib
-llvmlite
-nltk
-numba
-numpy
-regex
-scipy
-tqdm
