@@ -47,14 +47,6 @@ def main():
             if len(line) == 0:
                 continue
 
-            # escape some characters of the line
-            line = line \
-                    .replace("\\" , "\\\\") \
-                    .replace('\n', "\\n") \
-                    .replace('\r', "\\r") \
-                    .replace('"' , '\\"') \
-                    .replace("'" , "\\'") \
-
             # add the line of text
             lines.append(line.split('\t')[0])
 
@@ -73,7 +65,15 @@ def main():
         A helper method to recursively take a node in the parsed tree and turn it into a string.
         """
         label = f'"{tree.label()}"'
-        out = [f'"{n}"' if isinstance(n, str) else paren(n) for n in tree]
+        def escape(s: str):
+            return s \
+                .replace("\\" , "\\\\") \
+                .replace('\n', "\\n") \
+                .replace('\r', "\\r") \
+                .replace('\t', "\\t") \
+                .replace('"' , '\\"') \
+                .replace("'" , "\\'")
+        out = [f'"{escape(n)}"' if isinstance(n, str) else paren(n) for n in tree]
         strs = ','.join(out)
         strs = ',' + strs if strs else ''
         return f"({label}{strs})"

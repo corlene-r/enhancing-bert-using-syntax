@@ -21,7 +21,6 @@ class Context:
 
 def seq(*callables):
     def seq(cxt: "Context"):
-        #trace print(f"seq {cxt.pos}")
         save = cxt.pos
         res = []
         for callable in callables:
@@ -36,7 +35,6 @@ def seq(*callables):
 
 def one_of(*callables):
     def one_of(cxt: "Context"):
-        #trace print(f"one_of {cxt.pos}")
         for callable in callables:
             callable(cxt)
             if cxt.res is not None:
@@ -46,12 +44,10 @@ def one_of(*callables):
 
 def zero_or_more(callable):
     def zero_or_more(cxt: "Context"):
-        #trace print(f"zero_or_more {cxt.pos}")
         res = []
         prev = cxt.pos
         while True:
             callable(cxt)
-            #trace print(f"In zero_or_more {cxt.pos} {cxt.res}")
             if cxt.res is None:
                 cxt.pos = prev
                 cxt.res = res
@@ -61,19 +57,16 @@ def zero_or_more(callable):
 
 def call_matches(callable: Callable[[str], bool]):
     def call_matches(cxt: "Context"):
-        #trace print(f"call_matches {cxt.pos}")
         if (cxt.pos >= len(cxt.text)) or (callable(cxt.text[cxt.pos]) == False):
             cxt.res = None
             return
 
-        #trace print(f"Here! {cxt.text[cxt.pos]}")
         cxt.res = cxt.text[cxt.pos]
         cxt.pos += 1
     return call_matches
 
 def matches(s: str):
     def matches(cxt: "Context"):
-        #trace print(f"matches {cxt.pos} {s} == {cxt.text[cxt.pos:cxt.pos + len(s)]}")
         save = cxt.pos
         for c in s:
             if (cxt.pos >= len(cxt.text)) or (cxt.text[cxt.pos] != c):
@@ -88,7 +81,6 @@ def matches(s: str):
 
 def is_not(callable):
     def is_not(cxt: "Context"):
-        #trace print(f"is_not {cxt.pos}")
         save = cxt.pos
         callable(cxt)
         cxt.pos = save
@@ -100,7 +92,6 @@ def is_not(callable):
 
 def join(callable1, callable2):
     def join(cxt: "Context"):
-        #trace print(f"join {cxt.pos}")
         save = cxt.pos
         res = []
         callable1(cxt)
@@ -132,7 +123,6 @@ def join(callable1, callable2):
 
 def span_of(callable):
     def span_of(cxt: "Context"):
-        #trace print(f"span_of {cxt.pos}")
         start = cxt.pos
         callable(cxt)
         if cxt.res is None:
@@ -144,43 +134,34 @@ def span_of(callable):
 
 def map(callable, mapper):
     def map(cxt: "Context"):
-        #trace print(f"map {cxt.pos}")
         callable(cxt)
         if cxt.res is None: return
         cxt.res = mapper(cxt.res)
     return map
 
 def rec(callable):
+    cached = None
     def rec(cxt: "Context"):
-        callable()(cxt)
+        nonlocal cached
+        if cached is None:
+            cached = callable()
+        cached(cxt)
     return rec
 
 def load_trees_from(file: str) -> list[Tree]:
+    """
+    Load trees from the given file path.
+    """
+
     with open(file, 'r', encoding='utf8') as f:
         lines = f.read().split('\n')
 
     def w(cxt: Context):
-        #trace print(f'w {cxt.pos}')
         while True:
             if (cxt.pos >= len(cxt.text)) or (not cxt.text[cxt.pos].isspace()):
                 break
             cxt.pos += 1
         cxt.res = ""
-
-    def paren():
-        return map(
-            seq(
-                matches('('),
-                w,
-                join(
-                    one_of(string(), rec(paren)),
-                    seq(w, matches(','), w),
-                ),
-                w,
-                matches(')'),
-            ),
-            lambda x: Tree(x[2][0], x[2][1:])
-        )
 
     def string():
         return one_of(
@@ -205,23 +186,44 @@ def load_trees_from(file: str) -> list[Tree]:
             )
         )
 
+    _string_ = string()
+
+    def paren():
+        return map(
+            seq(
+                matches('('),
+                w,
+                join(
+                    one_of(_string_, rec(paren)),
+                    seq(w, matches(','), w),
+                ),
+                w,
+                matches(')'),
+            ),
+            lambda x: Tree(x[2][0], x[2][1:])
+        )
+
     trees = []
     cxt = Context("")
-    parser = seq(w, paren())
+    parser = map(seq(w, paren(), w), lambda x:x[1])
     for line in tqdm(lines, desc=f"Parsing Lines into trees for {file}"):
+
         if len(line) == 0:
             continue
 
         cxt.text = line
         cxt.pos = 0
         cxt.res = None
+
         parser(cxt)
+
         if cxt.res is None:
-            print(f'\nFailed to parse line: "{line}"')
+            print(f'\nFailed to parse line: "{line}"... stopping parses')
             return
         
         trees.append(cxt.res)
 
-    #print(trees)
+    return trees
 
-load_trees_from("../data/original/train_trees.tsv")
+
+#load_trees_from("../data/original/train_trees.tsv")

@@ -3,23 +3,18 @@ import torch.nn as nn
 from bert_model import BertPooler, BertPreTrainedModel, BertModel
 
 
-
-class ModifiedBertForMultiLabelClassification(BertPreTrainedModel):
+class SyntaxInterleavedBertForMultiLabelClassification(BertPreTrainedModel):
     """
-    First Version of Modified Go Emotions Bert Model (Model 2 in our writeup)
-
-    Output of first layer and final layer is given to the classifier.
+    The data from the syntax tree is interleaved into the bert model via a mask
+    that masks words that are too far away from one another in the tree.
     """
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
         self.bert = BertModel(config)
-
-        self.hidden_pooler = BertPooler(config)
-
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = nn.Linear(config.hidden_size * 2, self.config.num_labels)
+        self.classifier = nn.Linear(config.hidden_size, self.config.num_labels)
         self.loss_fct = nn.BCEWithLogitsLoss()
 
         self.init_weights()
@@ -41,19 +36,10 @@ class ModifiedBertForMultiLabelClassification(BertPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            output_hidden_states=True,
-            return_dict=True,
         )
-
-        first_hidden_state_result = outputs.hidden_states[0]
-        first_hidden_state_result = self.hidden_pooler(first_hidden_state_result)
-
-        pooled_output = outputs.pooler_output
-
-        pooled_output = torch.cat((pooled_output, first_hidden_state_result), 1)
+        pooled_output = outputs[1]
 
         pooled_output = self.dropout(pooled_output)
-
         logits = self.classifier(pooled_output)
 
         outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here

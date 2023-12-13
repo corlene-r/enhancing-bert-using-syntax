@@ -7,6 +7,8 @@ import csv
 import time
 
 import numpy as np
+from stanford
+from syntax_interleaved_bert_multi_label_classifier import SyntaxInterleavedBertForMultiLabelClassification-parser.load_trees import load_trees_from
 import torch
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from tqdm import tqdm, trange
@@ -20,6 +22,7 @@ from transformers import (
 
 from bert_multi_label_classifier import BertForMultiLabelClassification
 from modified_multi_label_classifier import ModifiedBertForMultiLabelClassification
+from syntax_bert_multi_label_classifier import SyntaxFedBertForMultiLabelClassification
 from utils import (
     init_logger,
     set_seed,
@@ -234,6 +237,10 @@ def evaluate(args, model, eval_dataset, mode, run_id, time_taken, add_csv_row, m
 
     return results
 
+GO_EMOTIONS = "goemotions"
+GO_EMOTIONS_MODIFIED = "goemotions_modified"
+GO_EMOTIONS_SYNTAX_FED = "goemotions_syntax_fed"
+GO_EMOTIONS_SYNTAX_INTERLEAVED = "goemotions_syntax_interleaved"
 
 def main(cli_args):
     # Read from config file and make args
@@ -267,16 +274,29 @@ def main(cli_args):
         args.tokenizer_name_or_path,
     )
 
-    if args.model_type == "goemotions":
+    # Create the Model
+    if args.model_type == GO_EMOTIONS:
         model = BertForMultiLabelClassification.from_pretrained(
             args.model_name_or_path,
             config=config
         )
-    else:
+    elif args.model_type == GO_EMOTIONS_MODIFIED:
         model = ModifiedBertForMultiLabelClassification.from_pretrained(
             args.model_name_or_path,
             config=config
         )
+    elif args.model_type == GO_EMOTIONS_SYNTAX_FED:
+        model = SyntaxFedBertForMultiLabelClassification.from_pretrained(
+            args.model_name_or_path,
+            config=config
+        )
+    elif args.model_type == GO_EMOTIONS_SYNTAX_INTERLEAVED:
+        model = SyntaxInterleavedBertForMultiLabelClassification.from_pretrained(
+            args.model_name_or_path,
+            config=config
+        )
+    else:
+        raise NotImplementedError(f"{args.model_type} is an unknown model option")
 
     # GPU or CPU
     args.device = "cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu"
@@ -330,13 +350,7 @@ if __name__ == '__main__':
     cli_parser = argparse.ArgumentParser()
 
     cli_parser.add_argument("--taxonomy", type=str, choices=("original", "ekman", "group"), help="Taxonomy (original, ekman, group)", default="original")
-    cli_parser.add_argument("--model_type", type=str, choices=("goemotions", "goemotions_modified"), help="What model to use to train (\"goemotions\", \"goemotions_modified\")", default="goemotions_modified")
+    cli_parser.add_argument("--model_type", type=str, choices=(GO_EMOTIONS, GO_EMOTIONS_MODIFIED, GO_EMOTIONS_SYNTAX_FED, GO_EMOTIONS_SYNTAX_INTERLEAVED), help=f'What model to use to train (\"{GO_EMOTIONS}\", \"{GO_EMOTIONS_MODIFIED}\", \"{GO_EMOTIONS_SYNTAX_FED}\", \"{GO_EMOTIONS_SYNTAX_INTERLEAVED}\")', default="goemotions")
 
     cli_args = cli_parser.parse_args()
-
-    #cli_args.model_type = "goemotions"
-    #main(cli_args)
-
-    cli_args.model_type = "goemotions_modified"
-    main(cli_args)
     main(cli_args)
