@@ -23,6 +23,7 @@ from transformers import (
 from bert_multi_label_classifier import BertForMultiLabelClassification
 from modified_multi_label_classifier import ModifiedBertForMultiLabelClassification
 from syntax_bert_multi_label_classifier import SyntaxFedBertForMultiLabelClassification
+from syntax_interleaved_bert_multi_label_classifier import SyntaxInterleavedBertForMultiLabelClassification
 from utils import (
     init_logger,
     set_seed,
@@ -277,8 +278,6 @@ def main(cli_args):
     tokenizer = BertTokenizer.from_pretrained(
         args.tokenizer_name_or_path,
     )
-    print("hello2")
-    print(args.model_type)
     # Create the Model
     if args.model_type == GO_EMOTIONS:
         model = BertForMultiLabelClassification.from_pretrained(
@@ -303,7 +302,6 @@ def main(cli_args):
         )
     else:
         raise NotImplementedError(f"{args.model_type} is an unknown model option")
-    print("hello3")
 
     # GPU or CPU
     args.device = "cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu"
@@ -311,7 +309,7 @@ def main(cli_args):
 
     run_id = str(time.time())
 
-    if True: # change to just syntax interleaved model later
+    if args.model_type == GO_EMOTIONS_SYNTAX_INTERLEAVED: # change to just syntax interleaved model later
         train_dataset = load_and_cache_examples(args, tokenizer, mode="train") if args.train_file else None
         dev_dataset = load_and_cache_examples(args, tokenizer, mode="dev") if args.dev_file else None
         test_dataset = load_and_cache_examples(args, tokenizer, mode="test") if args.test_file else None
