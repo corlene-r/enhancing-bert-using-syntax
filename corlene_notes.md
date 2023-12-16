@@ -1,0 +1,3 @@
+- Add transformers to requirements.txt file
+- Add sklearn to requirements.txt file
+- Change config file back to not be small trees later

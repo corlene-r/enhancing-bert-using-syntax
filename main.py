@@ -7,8 +7,8 @@ import csv
 import time
 
 import numpy as np
-from stanford
-from syntax_interleaved_bert_multi_label_classifier import SyntaxInterleavedBertForMultiLabelClassification-parser.load_trees import load_trees_from
+#from stanford
+#from syntax_interleaved_bert_multi_label_classifier import SyntaxInterleavedBertForMultiLabelClassification-parser.load_trees as load_trees_from
 import torch
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from tqdm import tqdm, trange
@@ -31,6 +31,10 @@ from utils import (
 from data_loader import (
     load_and_cache_examples,
     GoEmotionsProcessor
+)
+from data_loader_with_trees import (
+    load_and_cache_examples_with_trees,
+    GoEmotionsProcessorWithTrees
 )
 
 CSV_FILE = os.path.join(".", "evals.csv")
@@ -273,7 +277,8 @@ def main(cli_args):
     tokenizer = BertTokenizer.from_pretrained(
         args.tokenizer_name_or_path,
     )
-
+    print("hello2")
+    print(args.model_type)
     # Create the Model
     if args.model_type == GO_EMOTIONS:
         model = BertForMultiLabelClassification.from_pretrained(
@@ -291,12 +296,14 @@ def main(cli_args):
             config=config
         )
     elif args.model_type == GO_EMOTIONS_SYNTAX_INTERLEAVED:
+        print("load the model")
         model = SyntaxInterleavedBertForMultiLabelClassification.from_pretrained(
             args.model_name_or_path,
             config=config
         )
     else:
         raise NotImplementedError(f"{args.model_type} is an unknown model option")
+    print("hello3")
 
     # GPU or CPU
     args.device = "cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu"
@@ -304,10 +311,14 @@ def main(cli_args):
 
     run_id = str(time.time())
 
-    # Load dataset
-    train_dataset = load_and_cache_examples(args, tokenizer, mode="train") if args.train_file else None
-    dev_dataset = load_and_cache_examples(args, tokenizer, mode="dev") if args.dev_file else None
-    test_dataset = load_and_cache_examples(args, tokenizer, mode="test") if args.test_file else None
+    if True: # change to just syntax interleaved model later
+        train_dataset = load_and_cache_examples(args, tokenizer, mode="train") if args.train_file else None
+        dev_dataset = load_and_cache_examples(args, tokenizer, mode="dev") if args.dev_file else None
+        test_dataset = load_and_cache_examples(args, tokenizer, mode="test") if args.test_file else None
+    else:
+        train_dataset = load_and_cache_examples(args, tokenizer, mode="train") if args.train_file else None
+        dev_dataset = load_and_cache_examples(args, tokenizer, mode="dev") if args.dev_file else None
+        test_dataset = load_and_cache_examples(args, tokenizer, mode="test") if args.test_file else None
 
     saved_steps, global_step, tr_loss = train(args, model, tokenizer, train_dataset, args.model_type, run_id, dev_dataset, test_dataset)
     logger.info(" global_step = {}, average loss = {}".format(global_step, tr_loss))
