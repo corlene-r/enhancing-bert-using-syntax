@@ -35,6 +35,6 @@
     "save_steps": 1000,
     "learning_rate": 5e-5,
     "threshold": 0.3,
-    "adjacency_threshhold": 12,
-    "tree_threshhold": 50
+    "adjacency_threshhold": 15,
+    "tree_threshhold": 200
 }
