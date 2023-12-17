@@ -2,8 +2,8 @@ import os
 import copy
 import json
 import logging
-from nltk.tree.tree import Tree
 from difflib import get_close_matches
+from tqdm import tqdm
 
 import torch
 from torch.utils.data import TensorDataset
@@ -69,7 +69,7 @@ def convert_examples_to_features(
             i+=1
         return len(location1) - i + len(location2) - i
     trees = load_trees_from(tree_file)
-    processor = GoEmotionsProcessor(args)
+    processor = GoEmotionsProcessorWithTrees(args)
     label_list_len = len(processor.get_labels())
 
     def convert_to_one_hot_label(label):
@@ -81,12 +81,12 @@ def convert_examples_to_features(
     labels = [convert_to_one_hot_label(example.label) for example in examples]
 
     batch_encoding = tokenizer.batch_encode_plus(
-        [(example.text_a, example.text_b) for example in examples], max_length=max_length, pad_to_max_length=True
+        [(example.text_a, example.text_b) for example in examples], max_length=max_length, padding="max_length"
     )
 
     features = []
-    for i, example in enumerate(examples):
-        inputs = {k: batch_encoding[k][i] for k in batch_encoding}
+    for i, example in enumerate(tqdm(examples, desc=f"Converting {len(examples)} trees to closeness tensors")):
+        inputs = {k: batch_encoding[k][i][:max_length] for k in batch_encoding}
         
         feature = InputFeatures(**inputs, label=labels[i])
         tokens =  tokenizer.tokenize(example.text_a)
@@ -95,8 +95,8 @@ def convert_examples_to_features(
         for j, t in enumerate(tokens[:max_length]): 
             closest = get_close_matches(t, leaves, n=1)
             if closest: idxs_in_tree = [k for k in range(len(leaves)) if leaves[k] == closest[0]]
-            else: idxs_in_tree = [-1]
-            idx = min(idxs_in_tree, key=lambda x:abs(x-j))
+            else:       idxs_in_tree = [-1]
+            idx = min(idxs_in_tree, key=lambda x: abs(x-j))
             tree_idxs.append(idx)
         
         tree_idxs = [idx if idx == -1 else trees[i][0].leaf_treeposition(idx) for idx in tree_idxs]
@@ -112,15 +112,15 @@ def convert_examples_to_features(
         feature.attention_mask = attention_mask
         features.append(feature)
 
-    for i, example in enumerate(examples[:10]):
-        logger.info("*** Example ***")
-        logger.info("guid: {}".format(example.guid))
-        logger.info("sentence: {}".format(example.text_a))
-        logger.info("tokens: {}".format(" ".join([str(x) for x in tokenizer.tokenize(example.text_a)])))
-        logger.info("input_ids: {}".format(" ".join([str(x) for x in features[i].input_ids])))
-        logger.info("attention_mask: {}".format(" ".join([str(x) for x in features[i].attention_mask])))
-        logger.info("token_type_ids: {}".format(" ".join([str(x) for x in features[i].token_type_ids])))
-        logger.info("label: {}".format(" ".join([str(x) for x in features[i].label])))
+#    for i, example in enumerate(examples[:10]):
+#        logger.info("*** Example ***")
+#        logger.info("guid: {}".format(example.guid))
+#        logger.info("sentence: {}".format(example.text_a))
+#        logger.info("tokens: {}".format(" ".join([str(x) for x in tokenizer.tokenize(example.text_a)])))
+#        logger.info("input_ids: {}".format(" ".join([str(x) for x in features[i].input_ids])))
+#        logger.info("attention_mask: {}".format(" ".join([str(x) for x in features[i].attention_mask])))
+#        logger.info("token_type_ids: {}".format(" ".join([str(x) for x in features[i].token_type_ids])))
+#        logger.info("label: {}".format(" ".join([str(x) for x in features[i].label])))
 
     return features
 
@@ -153,8 +153,7 @@ class GoEmotionsProcessorWithTrees(object):
             items = line.split("\t")
             text_a = items[0]
             label = list(map(int, items[1].split(",")))
-            if i % 5000 == 0:
-                logger.info(line)
+            #if i % 5000 == 0: logger.info(line)
             examples.append(InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
         return examples
 
@@ -171,13 +170,12 @@ class GoEmotionsProcessorWithTrees(object):
         elif mode == 'test':
             file_to_read = self.args.test_file
 
-        logger.info("LOOKING AT {}".format(os.path.join(self.args.data_dir, file_to_read)))
-        return self._create_examples(self._read_file(os.path.join(self.args.data_dir,
-                                                                  file_to_read)), mode)
+        #logger.info("LOOKING AT {}".format(os.path.join(self.args.data_dir, file_to_read)))
+        return self._create_examples(self._read_file(os.path.join(self.args.data_dir, file_to_read)), mode)
 
 
 def load_and_cache_examples_with_trees(args, tokenizer, mode):
-    processor = GoEmotionsProcessor(args)
+    processor = GoEmotionsProcessorWithTrees(args)
     # Load data features from cache or dataset file
     cached_features_file = os.path.join(
         args.data_dir,
@@ -188,7 +186,10 @@ def load_and_cache_examples_with_trees(args, tokenizer, mode):
             mode
         )
     )
-    if False: #os.path.exists(cached_features_file):
+
+    max_length = args.max_seq_len
+
+    if os.path.exists(cached_features_file):
         logger.info("Loading features from cached file %s", cached_features_file)
         features = torch.load(cached_features_file)
     else:
@@ -204,8 +205,7 @@ def load_and_cache_examples_with_trees(args, tokenizer, mode):
             tree_file = args.test_tree_file
         else:
             raise ValueError("For mode, only train, dev, test is available")
-        features = convert_examples_to_features(
-            args, examples, tokenizer, max_length=args.max_seq_len, tree_file=tree_file)
+        features = convert_examples_to_features(args, examples, tokenizer, max_length=args.max_seq_len, tree_file=tree_file)
         logger.info("Saving features into cached file %s", cached_features_file)
         torch.save(features, cached_features_file)
 

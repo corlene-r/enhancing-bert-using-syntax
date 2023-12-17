@@ -154,7 +154,7 @@ def train(args,
         # Evaluate the model at this epoch
         time_passed = time.time() - start_time
         #evaluate(args, model, test_dataset, "test", run_id, time_passed, True, model_type, epoch, global_step)
-        evaluate(args, model, dev_dataset , "dev" , run_id, time_passed, True, model_type, epoch, global_step)
+        evaluate(args, model, dev_dataset , "dev" , run_id, time_passed, True, model_type, epoch, args.adjacency_threshhold, args.tree_threshhold, global_step)
 
         if args.max_steps > 0 and global_step > args.max_steps:
             break
@@ -162,7 +162,7 @@ def train(args,
     return saved_steps, global_step, tr_loss / global_step
 
 
-def evaluate(args, model, eval_dataset, mode, run_id, time_taken, add_csv_row, model_type, epoch, global_step=None):
+def evaluate(args, model, eval_dataset, mode, run_id, time_taken, add_csv_row, model_type, epoch, adjacency_threshhold, tree_threshhold, global_step=None):
     results = {}
     eval_sampler = SequentialSampler(eval_dataset)
     eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
@@ -213,8 +213,8 @@ def evaluate(args, model, eval_dataset, mode, run_id, time_taken, add_csv_row, m
     (result, headers, values) = compute_metrics(out_label_ids, preds)
     results.update(result)
 
-    headers = ["run_id",     "seed", "epoch", "mode",      "taxonomy", "time_taken", "model_type"] + headers
-    values  = [ run_id , args.seed ,  epoch ,  mode ,  args.taxonomy ,  time_taken ,  model_type ] + values
+    headers = ["run_id",     "seed", "epoch", "mode",      "taxonomy", "time_taken", "model_type"] + headers + ["adjacency_threshhold", "tree_threshhold"]
+    values  = [ run_id , args.seed ,  epoch ,  mode ,  args.taxonomy ,  time_taken ,  model_type ] + values  + [ adjacency_threshhold ,  tree_threshhold ]
 
     if add_csv_row:
         if not os.path.exists(CSV_FILE):
@@ -250,13 +250,18 @@ GO_EMOTIONS_SYNTAX_INTERLEAVED = "goemotions_syntax_interleaved"
 def main(cli_args):
     # Read from config file and make args
     config_filename = "{}.json".format(cli_args.taxonomy)
-    with open(os.path.join("config", config_filename)) as f:
+    with open(os.path.join("data", "config", config_filename)) as f:
         args = argparse.Namespace(**json.load(f))
     logger.info("Training/evaluation parameters {}".format(args))
 
     args.output_dir = os.path.join(args.ckpt_dir, args.output_dir)
     args.taxonomy = cli_args.taxonomy
     args.model_type = cli_args.model_type
+
+    if not hasattr(args, "adjacency_threshhold"):
+        args.adjacency_threshhold = 0
+    if not hasattr(args, "tree_threshhold"):
+        args.tree_threshhold = 0
 
     init_logger() 
 
@@ -278,6 +283,7 @@ def main(cli_args):
     tokenizer = BertTokenizer.from_pretrained(
         args.tokenizer_name_or_path,
     )
+
     # Create the Model
     if args.model_type == GO_EMOTIONS:
         model = BertForMultiLabelClassification.from_pretrained(
@@ -295,7 +301,6 @@ def main(cli_args):
             config=config
         )
     elif args.model_type == GO_EMOTIONS_SYNTAX_INTERLEAVED:
-        print("load the model")
         model = SyntaxInterleavedBertForMultiLabelClassification.from_pretrained(
             args.model_name_or_path,
             config=config
@@ -306,13 +311,14 @@ def main(cli_args):
     # GPU or CPU
     args.device = "cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu"
     model.to(args.device)
+    print("device: ", args.device)
 
     run_id = str(time.time())
 
     if args.model_type == GO_EMOTIONS_SYNTAX_INTERLEAVED: # change to just syntax interleaved model later
-        train_dataset = load_and_cache_examples(args, tokenizer, mode="train") if args.train_file else None
-        dev_dataset = load_and_cache_examples(args, tokenizer, mode="dev") if args.dev_file else None
-        test_dataset = load_and_cache_examples(args, tokenizer, mode="test") if args.test_file else None
+        train_dataset = load_and_cache_examples_with_trees(args, tokenizer, mode="train") if args.train_file else None
+        dev_dataset = load_and_cache_examples_with_trees(args, tokenizer, mode="dev") if args.dev_file else None
+        test_dataset = load_and_cache_examples_with_trees(args, tokenizer, mode="test") if args.test_file else None
     else:
         train_dataset = load_and_cache_examples(args, tokenizer, mode="train") if args.train_file else None
         dev_dataset = load_and_cache_examples(args, tokenizer, mode="dev") if args.dev_file else None
@@ -339,13 +345,19 @@ def main(cli_args):
                 # only evaluate the steps that were saved during training
                 continue
 
-            if model_type == "goemotions":
+            if args.model_type == GO_EMOTIONS:
                 model = BertForMultiLabelClassification.from_pretrained(checkpoint)
-            else:
+            elif args.model_type == GO_EMOTIONS_MODIFIED:
                 model = ModifiedBertForMultiLabelClassification.from_pretrained(checkpoint)
+            elif args.model_type == GO_EMOTIONS_SYNTAX_FED:
+                model = SyntaxFedBertForMultiLabelClassification.from_pretrained(checkpoint)
+            elif args.model_type == GO_EMOTIONS_SYNTAX_INTERLEAVED:
+                model = SyntaxInterleavedBertForMultiLabelClassification.from_pretrained(checkpoint)
+            else:
+                raise NotImplementedError(f"{args.model_type} is an unknown model option")
 
             model.to(args.device)
-            result = evaluate(args, model, test_dataset, "test", run_id=run_id, time_taken=0, add_csv_row=True, model_type=args.model_type, epoch=0, global_step=global_step)
+            result = evaluate(args, model, test_dataset, "test", run_id=run_id, time_taken=0, add_csv_row=True, model_type=args.model_type, epoch=0, adjacency_threshhold=args.adjacency_threshhold, tree_threshhold=args.tree_threshhold, global_step=global_step)
             result = dict((k + "_{}".format(global_step), v) for k, v in result.items())
             results.update(result)
 
@@ -362,4 +374,6 @@ if __name__ == '__main__':
     cli_parser.add_argument("--model_type", type=str, choices=(GO_EMOTIONS, GO_EMOTIONS_MODIFIED, GO_EMOTIONS_SYNTAX_FED, GO_EMOTIONS_SYNTAX_INTERLEAVED), help=f'What model to use to train (\"{GO_EMOTIONS}\", \"{GO_EMOTIONS_MODIFIED}\", \"{GO_EMOTIONS_SYNTAX_FED}\", \"{GO_EMOTIONS_SYNTAX_INTERLEAVED}\")', default="goemotions")
 
     cli_args = cli_parser.parse_args()
+    main(cli_args)
+    main(cli_args)
     main(cli_args)

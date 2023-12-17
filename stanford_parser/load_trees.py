@@ -33,6 +33,18 @@ def seq(*callables):
         cxt.res = res
     return seq
 
+def ig_seq(*callables):
+    def ig_seq(cxt: "Context"):
+        save = cxt.pos
+        for callable in callables:
+            callable(cxt)
+            if cxt.res is None:
+                cxt.pos = save
+                cxt.res = None
+                return
+        cxt.res = ""
+    return ig_seq
+
 def one_of(*callables):
     def one_of(cxt: "Context"):
         for callable in callables:
@@ -54,6 +66,18 @@ def zero_or_more(callable):
                 return
             prev = cxt.pos
     return zero_or_more
+
+def ig_zero_or_more(callable):
+    def ig_zero_or_more(cxt: "Context"):
+        prev = cxt.pos
+        while True:
+            callable(cxt)
+            if cxt.res is None:
+                cxt.pos = prev
+                cxt.res = ""
+                return
+            prev = cxt.pos
+    return ig_zero_or_more
 
 def call_matches(callable: Callable[[str], bool]):
     def call_matches(cxt: "Context"):
@@ -148,6 +172,22 @@ def rec(callable):
         cached(cxt)
     return rec
 
+def any_val(cxt: "Context"):
+    if cxt.pos >= len(cxt.text):
+        cxt.res = None
+    else:
+        cxt.res = cxt.text[cxt.pos]
+        cxt.pos += 1
+
+def maybe(callable):
+    def maybe(cxt: 'Context'):
+        save = cxt.pos
+        callable(cxt)
+        if cxt.res is None:
+            cxt.res = ""
+            cxt.pos = save
+    return maybe
+
 def load_trees_from(file: str) -> list[tuple[Tree, str]]:
     """
     Load trees from the given file path.
@@ -166,17 +206,17 @@ def load_trees_from(file: str) -> list[tuple[Tree, str]]:
     def string():
         return one_of(
             map(matches('"""'), lambda _: '"'),
-            map(matches('"\\"'), lambda _: '\\'),
-            map(seq(matches('"'), call_matches(lambda _: True), matches('\\"')), lambda x: x[1]),
+            map(seq(matches('"'), any_val, matches('\\"'), is_not(matches('"'))), lambda x: x[1]),
+            map(seq(matches('"\\"'), is_not(matches('"'))), lambda x: "\\"),
             map(
                 seq(
                     matches('"'),
-                    span_of(zero_or_more(
-                        seq(
+                    span_of(ig_zero_or_more(
+                        ig_seq(
                             is_not(matches('"')),
                             one_of(
-                                matches('\\"'),
-                                call_matches(lambda _: True),
+                                ig_seq(matches('\\'), any_val),
+                                any_val,
                             )
                         )
                     )),

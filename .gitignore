@@ -1,3 +1,6 @@
+# Stanford parser is too large for GitHub
+stanford_parser/stanford-parser-full-2020-11-17/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

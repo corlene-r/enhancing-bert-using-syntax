@@ -71,7 +71,7 @@ def convert_examples_to_features(
     labels = [convert_to_one_hot_label(example.label) for example in examples]
 
     batch_encoding = tokenizer.batch_encode_plus(
-        [(example.text_a, example.text_b) for example in examples], max_length=max_length, pad_to_max_length=True
+        [(example.text_a, example.text_b) for example in examples], max_length=max_length, padding="max_length"
     )
 
     features = []
@@ -81,15 +81,15 @@ def convert_examples_to_features(
         feature = InputFeatures(**inputs, label=labels[i])
         features.append(feature)
 
-    for i, example in enumerate(examples[:10]):
-        logger.info("*** Example ***")
-        logger.info("guid: {}".format(example.guid))
-        logger.info("sentence: {}".format(example.text_a))
-        logger.info("tokens: {}".format(" ".join([str(x) for x in tokenizer.tokenize(example.text_a)])))
-        logger.info("input_ids: {}".format(" ".join([str(x) for x in features[i].input_ids])))
-        logger.info("attention_mask: {}".format(" ".join([str(x) for x in features[i].attention_mask])))
-        logger.info("token_type_ids: {}".format(" ".join([str(x) for x in features[i].token_type_ids])))
-        logger.info("label: {}".format(" ".join([str(x) for x in features[i].label])))
+#    for i, example in enumerate(examples[:10]):
+#        logger.info("*** Example ***")
+#        logger.info("guid: {}".format(example.guid))
+#        logger.info("sentence: {}".format(example.text_a))
+#        logger.info("tokens: {}".format(" ".join([str(x) for x in tokenizer.tokenize(example.text_a)])))
+#        logger.info("input_ids: {}".format(" ".join([str(x) for x in features[i].input_ids])))
+#        logger.info("attention_mask: {}".format(" ".join([str(x) for x in features[i].attention_mask])))
+#        logger.info("token_type_ids: {}".format(" ".join([str(x) for x in features[i].token_type_ids])))
+#        logger.info("label: {}".format(" ".join([str(x) for x in features[i].label])))
 
     return features
 
@@ -122,8 +122,7 @@ class GoEmotionsProcessor(object):
             items = line.split("\t")
             text_a = items[0]
             label = list(map(int, items[1].split(",")))
-            if i % 5000 == 0:
-                logger.info(line)
+            #if i % 5000 == 0: logger.info(line)
             examples.append(InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
         return examples
 
@@ -140,9 +139,8 @@ class GoEmotionsProcessor(object):
         elif mode == 'test':
             file_to_read = self.args.test_file
 
-        logger.info("LOOKING AT {}".format(os.path.join(self.args.data_dir, file_to_read)))
-        return self._create_examples(self._read_file(os.path.join(self.args.data_dir,
-                                                                  file_to_read)), mode)
+        #logger.info("LOOKING AT {}".format(os.path.join(self.args.data_dir, file_to_read)))
+        return self._create_examples(self._read_file(os.path.join(self.args.data_dir, file_to_read)), mode)
 
 
 def load_and_cache_examples(args, tokenizer, mode):
