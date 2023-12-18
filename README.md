@@ -1,5 +1,5 @@
 
-# CS 769 Project
+# CS 769 Project: UW Madison FA 23
 ### Authors: Alexander Peseckis, Corlene Rhoades, Ojas Sethi
 
 This repository holds the code for our group's main project for CS 769. Our project is titled 'Enhancing BERT Sentiment Classification Syntactic Information.'
