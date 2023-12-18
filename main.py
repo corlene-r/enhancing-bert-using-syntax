@@ -244,7 +244,6 @@ def evaluate(args, model, eval_dataset, mode, run_id, time_taken, add_csv_row, m
 
 GO_EMOTIONS = "goemotions"
 GO_EMOTIONS_MODIFIED = "goemotions_modified"
-GO_EMOTIONS_SYNTAX_FED = "goemotions_syntax_fed"
 GO_EMOTIONS_SYNTAX_INTERLEAVED = "goemotions_syntax_interleaved"
 
 def main(cli_args):
@@ -292,11 +291,6 @@ def main(cli_args):
         )
     elif args.model_type == GO_EMOTIONS_MODIFIED:
         model = ModifiedBertForMultiLabelClassification.from_pretrained(
-            args.model_name_or_path,
-            config=config
-        )
-    elif args.model_type == GO_EMOTIONS_SYNTAX_FED:
-        model = SyntaxFedBertForMultiLabelClassification.from_pretrained(
             args.model_name_or_path,
             config=config
         )
@@ -349,8 +343,6 @@ def main(cli_args):
                 model = BertForMultiLabelClassification.from_pretrained(checkpoint)
             elif args.model_type == GO_EMOTIONS_MODIFIED:
                 model = ModifiedBertForMultiLabelClassification.from_pretrained(checkpoint)
-            elif args.model_type == GO_EMOTIONS_SYNTAX_FED:
-                model = SyntaxFedBertForMultiLabelClassification.from_pretrained(checkpoint)
             elif args.model_type == GO_EMOTIONS_SYNTAX_INTERLEAVED:
                 model = SyntaxInterleavedBertForMultiLabelClassification.from_pretrained(checkpoint)
             else:
@@ -371,7 +363,7 @@ if __name__ == '__main__':
     cli_parser = argparse.ArgumentParser()
 
     cli_parser.add_argument("--taxonomy", type=str, choices=("original", "ekman", "group"), help="Taxonomy (original, ekman, group)", default="original")
-    cli_parser.add_argument("--model_type", type=str, choices=(GO_EMOTIONS, GO_EMOTIONS_MODIFIED, GO_EMOTIONS_SYNTAX_FED, GO_EMOTIONS_SYNTAX_INTERLEAVED), help=f'What model to use to train (\"{GO_EMOTIONS}\", \"{GO_EMOTIONS_MODIFIED}\", \"{GO_EMOTIONS_SYNTAX_FED}\", \"{GO_EMOTIONS_SYNTAX_INTERLEAVED}\")', default="goemotions")
+    cli_parser.add_argument("--model_type", type=str, choices=(GO_EMOTIONS, GO_EMOTIONS_MODIFIED, GO_EMOTIONS_SYNTAX_INTERLEAVED), help=f'What model to use to train (\"{GO_EMOTIONS}\", \"{GO_EMOTIONS_MODIFIED}\", \"{GO_EMOTIONS_SYNTAX_INTERLEAVED}\")', default="goemotions")
 
     cli_args = cli_parser.parse_args()
     main(cli_args)
