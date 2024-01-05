@@ -11,3 +11,5 @@ To train the model on the origional go-emotions dataset, run `python main.py`. T
 You can also choose whether it uses the origional go-emotions model or our modified go-emotions model via the `--model_type` flag. By default, the modofied go-emotions model is used.
 
 The syntax parser that we used was the Stanford Parser. It's not included in this repository because of file size constraints. However, the ```.jar``` file can be downloaded from this link: [Stanford Parser](https://nlp.stanford.edu/software/lex-parser.shtml#Download). Some of the parsed trees are included in the ```data``` directory.
+
+The paper and report for this experiment can be found in the repository with the file name ```report.pdf```.
