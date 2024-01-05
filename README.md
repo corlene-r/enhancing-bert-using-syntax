@@ -1,8 +1,8 @@
 
-# CS 769 Project: UW Madison FA 23
+# Enhancing BERT Sentiment Classification using Syntactic Information
 ### Authors: Alexander Peseckis, Corlene Rhoades, Ojas Sethi
 
-This repository holds the code for our group's main project for CS 769. Our project is titled 'Enhancing BERT Sentiment Classification Syntactic Information.'
+This repository holds the code for our group's main project. Our project is titled 'Enhancing BERT Sentiment Classification Syntactic Information.'
 
 To install the dependencies, run ```pip install -r requirements.txt``` from the main directory.
 
